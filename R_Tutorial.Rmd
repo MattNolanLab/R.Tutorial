@@ -1,0 +1,271 @@
+---
+title: "Tutorial"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+
+---
+Basic functions of R :
+Loading data, basic data manipulation and analysis, plotting, saving
+---
+
+First we want to load some packages
+```{r}
+library(tidyverse) # core package for data manipulation
+```
+
+Then we want to load our .csv or .txt datasets 
+```{r}
+# Example : read.csv("Path where your CSV file is located on your computer\\File Name.csv")
+data <- read.csv("some_data.csv")
+```
+
+Now we might want to view the data
+```{r}
+View(data)
+```
+
+Now we can ask some questions of the data. i.e how many cells per animal? Basic mean, sd, sem
+```{r}
+average_data <- data %>%
+  select(Mouse, number_of_cells) %>%
+  group_by(Mouse) %>%
+  summarise(mean = mean(number_of_cells), sd = sd(number_of_cells), count = sum(number_of_cells))
+```
+
+Plot the data as a bar graph
+```{r}
+ggplot(data=average_data, aes(x= Mouse, y = count)) +
+  geom_bar(stat="identity",width = 0.9, alpha = .4) +
+  labs(y = "Count", x = "\nMouse id") +
+  theme_classic() +
+  theme(axis.text.x = element_text(size=16),
+        axis.text.y = element_text(size=16),
+        text = element_text(size=16), 
+        legend.text=element_text(size=16), 
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)))
+```
+Save the plot to .png
+```{r}
+ggsave(file = "cell_count.png", width = 3, height = 4)
+```
+
+
+Does cell number depend on brain region?
+
+Lets run the analysis again but include brain region as a factor 
+
+```{r}
+average_data <- data %>%
+  select(Mouse, number_of_cells, estimated_location) %>%
+  group_by(estimated_location, Mouse) %>%
+  summarise(mean = mean(number_of_cells), sd = sd(number_of_cells), count = sum(number_of_cells))
+```
+
+Plot the data again but grouped by brain region
+```{r}
+ggplot(data=average_data, aes(x= estimated_location, y = count)) +
+  geom_bar(stat="identity",width = 0.9, alpha = .4) + # alpha defines the opacity 
+  labs(y = "Count", x = "\nMouse id") +
+  theme_classic() +
+  theme(axis.text.x = element_text(size=16),
+        axis.text.y = element_text(size=16),
+        text = element_text(size=16), 
+        legend.text=element_text(size=16), 
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)))
+```
+
+Install package for color palettes 
+```{r}
+# Install
+install.packages("wesanderson")
+# Load
+library(wesanderson)
+```
+
+Plot the data again but grouped by brain region
+```{r}
+ggplot(data=average_data, aes(x= estimated_location, y = count, fill=estimated_location)) +
+  geom_bar(stat="identity",width = 0.9, alpha = .7) +
+  scale_fill_manual(values=wes_palette(n=5, name="Cavalcanti1")) + 
+  labs(y = "Count", x = "\nMouse id") +
+  theme_classic() +
+  theme(axis.text.x = element_text(size=14),
+        axis.text.y = element_text(size=14),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        text = element_text(size=14),
+        legend.text=element_text(size=14),
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)))
+```
+
+We can even see if this is statistically significant! 
+
+```{r}
+one.way <- aov(number_of_cells ~ estimated_location, data = data)
+
+summary(one.way)
+```
+
+Save results as a .txt or .csv 
+```{r}
+write_csv2(average_data, "average_data.csv")
+```
+
+
+
+
+---
+More complicated applications of R :
+Loading data with python, building functions, efficient plotting
+---
+
+## load some packages
+```{r}
+library(reticulate) # package that allows R to call python code
+library(pheatmap) # this package lets you make nice heatmaps
+```
+
+## load pickled dataframes i.e. python output
+First we need to set up the python environment. This is so we can call a python script from R that loads the pickled dataframes and sends it back to the R workspace. 
+The python environment needs to be >v.3 as 2.7 (system python) doesnt have Pandas package which is needed to open dataframes
+
+```{r}
+require(reticulate) # if a particular package is needed, you can use require to check its loaded
+Sys.setenv(RETICULATE_PYTHON = "/usr/local/bin/python/bin/python") # working directory for python
+```
+
+Load python code to load pickle dataframe
+```{r}
+source_python("pickle_reader.py") # run python script which loads the dataframes - should be in working directory
+
+```
+
+Specify name of dataframe to load, and load it
+```{r}
+dataframe_to_load <- "spatial_firing_test.pkl" # name of the pickled dataframe want to load 
+dataset <- read_pickle_file(file.path(dataframe_to_load)) # function to call in the python code
+```
+
+Alternatively, you can load a .Rda dataframe that has been previousy saved in R
+```{r}
+spatial_firing <- readRDS(file="dataset.Rda")
+```
+
+View the data : because its large, we will just view a few rows & check that it's all good
+```{r}
+View(head(dataset, n=3)) # this loads the first 5 rows of the dataframe
+```
+
+
+
+Introducting functions...
+
+# Plot heat map of firing rate across location for all neurons
+
+First, scale firing rate for all neurons
+
+1. make function to load rates and normalise
+2. Run on dataframe 
+```{r}
+normalise_rates <- function(m){
+  m <- as.vector(unlist(m))
+  m <- (m - min(m))/(max(m)-min(m))
+  return(m)
+}
+
+```
+
+```{r}
+dataset <- dataset %>%
+  mutate(normalised_rates = map(Rates_averaged_rewarded_b, normalise_rates))
+```
+
+Add position to for plotting
+```{r}
+add_position <- function(df) {
+  df <- tibble(Rates = df, Position = rep(1:200))
+}
+
+```
+
+```{r}
+dataset <- dataset %>%
+  mutate(nested_normalised_rates = map(normalised_rates, add_position))
+
+```
+
+Extract columns (normalised rates) for plotting into a tibble
+```{r}
+concat_firing <- unnest(select(dataset, cluster_id, nested_normalised_rates))
+```
+
+First convert it to wide format
+```{r}
+wide_DF <- concat_firing %>% spread(Position, Rates)
+```
+
+Change the column/row names of the dataframe
+```{r}
+colnames(wide_DF) <-rep(1:200, times=1)
+rownames(wide_DF) <- paste("neuron", 1:nrow(dataset), sep="_")
+```
+
+Get rid of unused columns 
+```{r}
+#remove unused column
+name <- "cluster_id"
+wide_DF <- wide_DF %>% select(-one_of(name))
+
+```
+
+Now we can plot the heatmap using pheatmap
+```{r}
+myheatmap<-pheatmap(wide_DF,cluster_cols = F, cluster_rows = F, show_rownames = T, show_colnames = F )
+```
+
+Save the heatmap (bit of a nightmare here...)
+```{r}
+save_pheatmap_png <- function(x, filename, width=1300, height=2500, res = 250) {
+  png(filename, width = width, height = height, res = res)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+ 
+save_pheatmap_png(myheatmap, "my_heatmap_all.png")
+```
+
+
+Save the analysed dataframe with new results
+```{r}
+saveRDS(dataset, file="dataset_mod.Rda")
+```
+
